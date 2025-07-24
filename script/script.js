@@ -21,7 +21,7 @@ async function crawlNovel(startUrl) {
         const novelId = novelIdMatch[1];
         
         // Create result directory if it doesn't exist
-        const resultDir = path.join(__dirname, 'result');
+const resultDir = path.join(__dirname, '../results');
         if (!fs.existsSync(resultDir)) {
             fs.mkdirSync(resultDir, { recursive: true });
         }
