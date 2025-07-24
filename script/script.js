@@ -79,28 +79,23 @@ async function crawlNovel(startUrl) {
                     // Remove unwanted elements
                     $('script, style, iframe, noscript, p.abg, .ad, .ads').remove();
 
-                    const titleElement = $('article.page-content > h3');
-                    let title = titleElement.text().trim();
+                    const title = $('article.page-content > h3').text().trim();
                     let content = $('article.page-content section p')
                         .map((_, el) => $(el).text().trim().replace(/https?:\/\/[^\s]+/g, ''))
                         .get()
-                        .join('\n\n')
-                        .trim();
+                        .join('\n\n');
 
-                    // Only add to results if there's content
-                    if (content) {
-                        // Use chapter number if title is empty
-                        const chapterNumber = chapterUrls.length - index;
-                        const finalTitle = title || `Chapter ${chapterNumber}`;
-                        
-                        result[chapterUrls.length - 1 - index] = { 
-                            title: finalTitle, 
-                            content 
-                        };
-                    }
+                    // Store in reverse order (we'll reverse the array later)
+                    result[chapterUrls.length - 1 - index] = { 
+                        title: title || `Chapter ${chapterUrls.length - index}`, 
+                        content 
+                    };
                 } catch (error) {
                     console.error(`\nError downloading ${url}:`, error.message);
-                    // Don't add failed chapters to results
+                    result[chapterUrls.length - 1 - index] = { 
+                        title: `Chapter ${chapterUrls.length - index} [Failed]`, 
+                        content: '' 
+                    };
                 } finally {
                     completed++;
                     updateProgress();
@@ -108,13 +103,10 @@ async function crawlNovel(startUrl) {
             })
         ));
 
-        // Filter out any undefined entries (failed or empty chapters)
-        const finalResult = result.filter(Boolean);
-
-        // Finalize output
+        // Finalize output (no need to reverse since we stored in correct order)
         console.log('\n');
-        await writeFile(outputFile, JSON.stringify(finalResult, null, 2));
-        console.log(`Saved ${finalResult.length} chapters to ${outputFile}`);
+        await writeFile(outputFile, JSON.stringify(result, null, 2));
+        console.log(`Saved ${result.length} chapters to ${outputFile}`);
 
         return outputFile;
     } catch (error) {
