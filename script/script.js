@@ -6,38 +6,45 @@ const { URL } = require('url');
 const { promisify } = require('util');
 const { default: PQueue } = require('p-queue');
 
-// Promisify file operations
 const writeFile = promisify(fs.writeFile);
 const mkdir = promisify(fs.mkdir);
 
 async function crawlNovel(startUrl) {
     try {
         console.log(`Starting crawl for URL: ${startUrl}`);
-        
-        // Validate and normalize URL
+
+        // Normalize URL (add https:// if missing)
         if (!startUrl.startsWith('http')) {
             startUrl = `https://${startUrl}`;
         }
-        
-        // Extract novel ID from URL
+
+        // Extract novel ID and starting chapter number
         const novelIdMatch = startUrl.match(/\/read\/(\d+)/);
-        if (!novelIdMatch) {
-            throw new Error('Invalid URL format');
-        }
+        if (!novelIdMatch) throw new Error('Invalid URL format');
         const novelId = novelIdMatch[1];
-        
-        // Create result directory
+
+        const chapterMatch = startUrl.match(/p(\d+)\.html/);
+        if (!chapterMatch) throw new Error('Could not extract chapter number');
+        const startChapter = parseInt(chapterMatch[1], 10);
+
+        // Generate all chapter URLs (from startChapter down to 1)
+        const baseUrl = new URL(startUrl).origin;
+        const chapterUrls = Array.from({ length: startChapter }, (_, i) => 
+            `${baseUrl}/read/${novelId}/p${startChapter - i}.html`
+        );
+
+        console.log(`Found ${chapterUrls.length} chapters to download`);
+
+        // Create results directory
         const resultDir = path.join(__dirname, '../results');
         if (!fs.existsSync(resultDir)) {
             await mkdir(resultDir, { recursive: true });
         }
-        
+
         const outputFile = path.join(resultDir, `${novelId}.json`);
         const result = [];
-        
-        const baseUrl = new URL(startUrl).origin;
-        let currentUrl = startUrl;
 
+        // Configure HTTP client
         const axiosInstance = axios.create({
             timeout: 10000,
             headers: {
@@ -46,85 +53,38 @@ async function crawlNovel(startUrl) {
             }
         });
 
-        // Get first chapter and chapter list
-        let chapterUrls = [];
-        try {
-            const mainPageResponse = await axiosInstance.get(currentUrl);
-            const $main = cheerio.load(mainPageResponse.data);
-            
-            // Get all chapter links
-            $main('ul.u-chapter.cfirst li a').each((i, el) => {
-                const chapterUrl = $main(el).attr('href');
-                if (chapterUrl) {
-                    chapterUrls.push(new URL(chapterUrl, baseUrl).href);
-                }
-            });
-
-            if (chapterUrls.length === 0) {
-                throw new Error('No chapters found');
-            }
-
-            console.log(`Found ${chapterUrls.length} chapters`);
-        } catch (error) {
-            console.error('Error getting chapter list:', error.message);
-            throw error;
-        }
-
-        // Limit to MAX_CHAPTERS for safety
-        const MAX_CHAPTERS = 50;
-        chapterUrls = chapterUrls.slice(0, MAX_CHAPTERS);
-        
-        // Create a queue for parallel downloads with concurrency control
-        const queue = new PQueue({
-            concurrency: 5, // Number of parallel downloads
-            timeout: 30000
-        });
-
+        // Parallel download queue (5 at a time)
+        const queue = new PQueue({ concurrency: 5 });
         let completed = 0;
-        const totalChapters = chapterUrls.length;
-        
-        // Progress tracking
+
+        // Progress tracker (single-line updates)
         const updateProgress = () => {
-            process.stdout.write(`\rDownloading: ${completed}/${totalChapters} chapters [${'#'.repeat(Math.floor(completed/totalChapters*20))}${'-'.repeat(20-Math.floor(completed/totalChapters*20))}]`);
+            process.stdout.write(`\rDownloading: ${completed}/${chapterUrls.length} chapters`);
         };
 
-        console.log('Starting parallel downloads...');
+        console.log('Starting downloads...');
         updateProgress();
 
-        // Process each chapter in parallel
-        const promises = chapterUrls.map((chapterUrl, index) => 
+        // Download all chapters in parallel
+        await Promise.all(chapterUrls.map((url, index) =>
             queue.add(async () => {
                 try {
-                    const response = await axiosInstance.get(chapterUrl);
+                    const response = await axiosInstance.get(url);
                     const $ = cheerio.load(response.data);
-                    
+
                     // Remove unwanted elements
                     $('script, style, iframe, noscript, p.abg, .ad, .ads').remove();
-                    
+
                     const title = $('article.page-content > h3').text().trim();
-                    
-                    // Get clean content
-                    let content = '';
-                    $('article.page-content section p').each((i, el) => {
-                        const text = $(el).text().trim();
-                        content += text.replace(/https?:\/\/[^\s]+/g, '') + '\n\n';
-                    });
-                    content = content.trim();
-                    
-                    if (title || content) {
-                        result.push({
-                            title: title || `Chapter ${index + 1}`,
-                            content,
-                            url: chapterUrl
-                        });
-                    }
+                    let content = $('article.page-content section p')
+                        .map((_, el) => $(el).text().trim().replace(/https?:\/\/[^\s]+/g, ''))
+                        .get()
+                        .join('\n\n');
+
+                    result[index] = { title: title || `Chapter ${index + 1}`, content };
                 } catch (error) {
-                    console.error(`\nError crawling ${chapterUrl}:`, error.message);
-                    result.push({
-                        title: `Chapter ${index + 1} [Failed to download]`,
-                        content: '',
-                        url: chapterUrl
-                    });
+                    console.error(`\nError downloading ${url}:`, error.message);
+                    result[index] = { title: `Chapter ${index + 1} [Failed]`, content: '' };
                 } finally {
                     completed++;
                     updateProgress();
@@ -132,28 +92,11 @@ async function crawlNovel(startUrl) {
             })
         );
 
-        // Wait for all downloads to complete
-        await Promise.all(promises);
-        
-        // Sort chapters by their order in the original list
-        result.sort((a, b) => {
-            const aIndex = chapterUrls.indexOf(a.url);
-            const bIndex = chapterUrls.indexOf(b.url);
-            return aIndex - bIndex;
-        });
-
-        // Clean up URLs from final result
-        const finalResult = result.map(chapter => ({
-            title: chapter.title,
-            content: chapter.content
-        }));
-
-        // Move to new line after progress bar
+        // Finalize output
         console.log('\n');
-        
-        await writeFile(outputFile, JSON.stringify(finalResult, null, 2));
-        console.log(`Crawl completed. Saved ${finalResult.length} chapters to ${outputFile}`);
-        
+        await writeFile(outputFile, JSON.stringify(result, null, 2));
+        console.log(`Saved ${result.length} chapters to ${outputFile}`);
+
         return outputFile;
     } catch (error) {
         console.error('\nCrawl failed:', error.message);
@@ -161,7 +104,7 @@ async function crawlNovel(startUrl) {
     }
 }
 
-// Execute
+// Run
 const url = process.argv[2] || process.env.INPUT_URL;
 if (!url) {
     console.error('Please provide a URL');
@@ -169,5 +112,5 @@ if (!url) {
 }
 
 crawlNovel(url)
-    .then(outputFile => process.exit(0))
+    .then(() => process.exit(0))
     .catch(() => process.exit(1));
