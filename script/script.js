@@ -5,6 +5,7 @@ const path = require('path');
 const { URL } = require('url');
 const { promisify } = require('util');
 const { default: PQueue } = require('p-queue');
+const readline = require('readline');  // Added this line
 
 const writeFile = promisify(fs.writeFile);
 const mkdir = promisify(fs.mkdir);
@@ -61,9 +62,11 @@ async function crawlNovel(startUrl) {
         const queue = new PQueue({ concurrency: 5 });
         let completed = 0;
 
-        // Progress tracker (single-line updates)
+        // Improved progress tracker using readline
         const updateProgress = () => {
-            process.stdout.write(`\rDownloading: ${completed}/${chapterUrls.length} chapters`);
+            readline.clearLine(process.stdout, 0);
+            readline.cursorTo(process.stdout, 0);
+            process.stdout.write(`Downloading: ${completed}/${chapterUrls.length} chapters`);
         };
 
         console.log('Starting downloads...');
@@ -97,7 +100,7 @@ async function crawlNovel(startUrl) {
         ));
 
         // Finalize output
-        console.log('\n');
+        process.stdout.write('\n');  // Move to next line after progress
         await writeFile(outputFile, JSON.stringify(result, null, 2));
         console.log(`Saved ${result.length} chapters to ${outputFile}`);
 
