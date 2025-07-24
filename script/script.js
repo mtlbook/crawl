@@ -13,91 +13,77 @@ async function crawlNovel(startUrl) {
     try {
         console.log(`Starting crawl for URL: ${startUrl}`);
 
-        // Normalize URL (add https:// if missing)
+        // Normalize URL (ensure it starts with https://)
         if (!startUrl.startsWith('http')) {
             startUrl = `https://${startUrl}`;
         }
 
-        // Extract novel ID and starting chapter number
+        // Extract novel ID
         const novelIdMatch = startUrl.match(/\/read\/(\d+)/);
         if (!novelIdMatch) throw new Error('Invalid URL format');
         const novelId = novelIdMatch[1];
-
-        // Get the latest chapter from the main page
         const baseUrl = new URL(startUrl).origin;
+
+        // Fetch latest chapter number
         const axiosInstance = axios.create({
             timeout: 10000,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9',
             }
         });
 
-        // Fetch the latest chapter number
-        const mainPageResponse = await axiosInstance.get(startUrl);
-        const $main = cheerio.load(mainPageResponse.data);
+        const mainPage = await axiosInstance.get(startUrl);
+        const $main = cheerio.load(mainPage.data);
         const latestChapterUrl = $main('ul.u-chapter.cfirst li a').first().attr('href');
-        const latestChapterMatch = latestChapterUrl.match(/p(\d+)\.html/);
-        if (!latestChapterMatch) throw new Error('Could not extract latest chapter number');
-        const latestChapter = parseInt(latestChapterMatch[1], 10);
+        const latestChapterNum = parseInt(latestChapterUrl.match(/p(\d+)\.html/)[1], 10);
 
-        // Generate all chapter URLs (from latest down to 1)
-        const chapterUrls = Array.from({ length: latestChapter }, (_, i) => 
-            `${baseUrl}/read/${novelId}/p${latestChapter - i}.html`
+        // Generate all chapter URLs (from latest down to p1.html)
+        const chapterUrls = Array.from(
+            { length: latestChapterNum },
+            (_, i) => `${baseUrl}/read/${novelId}/p${latestChapterNum - i}.html`
         );
 
-        console.log(`Found ${chapterUrls.length} chapters to download`);
+        console.log(`Found ${chapterUrls.length} chapters. Starting download...`);
 
-        // Create results directory
+        // Prepare output directory
         const resultDir = path.join(__dirname, '../results');
-        if (!fs.existsSync(resultDir)) {
-            await mkdir(resultDir, { recursive: true });
-        }
-
+        if (!fs.existsSync(resultDir)) await mkdir(resultDir, { recursive: true });
         const outputFile = path.join(resultDir, `${novelId}.json`);
         const result = [];
 
-        // Parallel download queue (5 at a time)
+        // Download in parallel (5 at a time)
         const queue = new PQueue({ concurrency: 5 });
         let completed = 0;
 
-        // Progress tracker (single-line updates)
+        // Single-line progress updater
         const updateProgress = () => {
             process.stdout.write(`\rDownloading: ${completed}/${chapterUrls.length} chapters`);
         };
 
-        console.log('Starting downloads...');
-        updateProgress();
-
-        // Download all chapters in parallel
         await Promise.all(chapterUrls.map((url, index) =>
             queue.add(async () => {
                 try {
-                    const response = await axiosInstance.get(url);
-                    const $ = cheerio.load(response.data);
-
-                    // Remove unwanted elements
-                    $('script, style, iframe, noscript, p.abg, .ad, .ads').remove();
+                    const res = await axiosInstance.get(url);
+                    const $ = cheerio.load(res.data);
+                    $('script, style, .ad').remove(); // Clean unwanted elements
 
                     const title = $('article.page-content > h3').text().trim();
-                    let content = $('article.page-content section p')
-                        .map((_, el) => $(el).text().trim().replace(/https?:\/\/[^\s]+/g, ''))
+                    const content = $('article.page-content section p')
+                        .map((_, el) => $(el).text().trim())
                         .get()
                         .join('\n\n');
 
                     result[index] = { title: title || `Chapter ${index + 1}`, content };
                 } catch (error) {
-                    console.error(`\nError downloading ${url}:`, error.message);
                     result[index] = { title: `Chapter ${index + 1} [Failed]`, content: '' };
                 } finally {
                     completed++;
-                    updateProgress();
+                    updateProgress(); // Update progress in the same line
                 }
             })
-        ));
+        );
 
-        // Finalize output
-        console.log('\n');
+        console.log('\nDone! Saving results...');
         await writeFile(outputFile, JSON.stringify(result, null, 2));
         console.log(`Saved ${result.length} chapters to ${outputFile}`);
 
@@ -108,10 +94,10 @@ async function crawlNovel(startUrl) {
     }
 }
 
-// Run
+// Execute
 const url = process.argv[2] || process.env.INPUT_URL;
 if (!url) {
-    console.error('Please provide a URL');
+    console.error('Usage: node script.js <URL>');
     process.exit(1);
 }
 
