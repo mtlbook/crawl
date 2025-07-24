@@ -23,14 +23,27 @@ async function crawlNovel(startUrl) {
         if (!novelIdMatch) throw new Error('Invalid URL format');
         const novelId = novelIdMatch[1];
 
-        const chapterMatch = startUrl.match(/p(\d+)\.html/);
-        if (!chapterMatch) throw new Error('Could not extract chapter number');
-        const startChapter = parseInt(chapterMatch[1], 10);
-
-        // Generate all chapter URLs (from startChapter down to 1)
+        // Get the latest chapter from the main page
         const baseUrl = new URL(startUrl).origin;
-        const chapterUrls = Array.from({ length: startChapter }, (_, i) => 
-            `${baseUrl}/read/${novelId}/p${startChapter - i}.html`
+        const axiosInstance = axios.create({
+            timeout: 10000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+            }
+        });
+
+        // Fetch the latest chapter number
+        const mainPageResponse = await axiosInstance.get(startUrl);
+        const $main = cheerio.load(mainPageResponse.data);
+        const latestChapterUrl = $main('ul.u-chapter.cfirst li a').first().attr('href');
+        const latestChapterMatch = latestChapterUrl.match(/p(\d+)\.html/);
+        if (!latestChapterMatch) throw new Error('Could not extract latest chapter number');
+        const latestChapter = parseInt(latestChapterMatch[1], 10);
+
+        // Generate all chapter URLs (from latest down to 1)
+        const chapterUrls = Array.from({ length: latestChapter }, (_, i) => 
+            `${baseUrl}/read/${novelId}/p${latestChapter - i}.html`
         );
 
         console.log(`Found ${chapterUrls.length} chapters to download`);
@@ -43,15 +56,6 @@ async function crawlNovel(startUrl) {
 
         const outputFile = path.join(resultDir, `${novelId}.json`);
         const result = [];
-
-        // Configure HTTP client
-        const axiosInstance = axios.create({
-            timeout: 10000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9',
-            }
-        });
 
         // Parallel download queue (5 at a time)
         const queue = new PQueue({ concurrency: 5 });
@@ -90,7 +94,7 @@ async function crawlNovel(startUrl) {
                     updateProgress();
                 }
             })
-        );
+        ));
 
         // Finalize output
         console.log('\n');
