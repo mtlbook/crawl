@@ -15,7 +15,9 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      
+      with:
+        fetch-depth: 0  # Needed to push changes back
+        
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
@@ -25,14 +27,12 @@ jobs:
       run: npm install
       
     - name: Run crawler
-      env:
-        INPUT_URL: ${{ github.event.inputs.url }}
-      run: |
-        node script/script.js "${{ github.event.inputs.url }}"
+      run: node script/script.js "${{ github.event.inputs.url }}"
         
-    - name: Upload results
-      uses: actions/upload-artifact@v4
-      with:
-        name: novel-results
-        path: script/result
-        retention-days: 5
+    - name: Commit and push results
+      run: |
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+        git add script/result
+        git commit -m "Add crawled novel data for ${{ github.event.inputs.url }}" || echo "No changes to commit"
+        git push
