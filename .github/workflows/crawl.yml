@@ -1,4 +1,3 @@
-# .github/workflows/crawl.yml
 name: Novel Crawler
 on:
   workflow_dispatch:
@@ -24,10 +23,11 @@ jobs:
       - name: Install dependencies
         run: npm install axios cheerio
         
+      - name: Create results directory
+        run: mkdir -p results
+        
       - name: Run crawler
-        run: |
-          mkdir -p results
-          node scripts/crawler.js "${{ inputs.query }}" "${{ inputs.url || '' }}"
+        run: node scripts/crawler.js "${{ inputs.query }}" "${{ inputs.url || '' }}"
           
       - name: Upload results
         uses: actions/upload-artifact@v4
