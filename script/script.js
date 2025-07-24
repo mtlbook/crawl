@@ -36,9 +36,10 @@ const resultDir = path.join(__dirname, '../results');
         const MAX_PAGES = 6845;
 
         const axiosInstance = axios.create({
-            timeout: 100,
+            timeout: 5000,
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
             }
         });
 
