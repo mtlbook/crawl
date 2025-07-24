@@ -34,16 +34,21 @@ async function crawlNovel(startUrl) {
         let hasNextPage = true;
         let pageCount = 0;
         const MAX_PAGES = 10; // Safety limit
-        
+
+        // Configure axios with better defaults
+        const axiosInstance = axios.create({
+            timeout: 1000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+            }
+        });
+
         // First, get the first chapter URL from the main page
         try {
             console.log(`Fetching main page: ${currentUrl}`);
-            const mainPageResponse = await axios.get(currentUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                },
-                timeout: 1000
-            });
+            const mainPageResponse = await axiosInstance.get(currentUrl);
             
             const $main = cheerio.load(mainPageResponse.data);
             const firstChapterUrl = $main('ul.u-chapter.cfirst li a').first().attr('href');
@@ -62,36 +67,31 @@ async function crawlNovel(startUrl) {
         while (hasNextPage && pageCount < MAX_PAGES) {
             try {
                 console.log(`Crawling page ${pageCount + 1}: ${currentUrl}`);
-                const response = await axios.get(currentUrl, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                    },
-                    timeout: 1000
-                });
+                const response = await axiosInstance.get(currentUrl);
                 
                 const $ = cheerio.load(response.data);
                 
-                // Extract title and content
-                const title = $('article.page-content h3').text().trim();
-                let content = $('article.page-content section').html();
+                // Extract title using the selector from your Python example
+                const title = $('article.page-content > h3').text().trim();
                 
-                // Clean up content - keep only text and <p> tags
-                if (content) {
-                    const $content = cheerio.load(content);
-                    $content('*').not('p, br').each(function() {
-                        $content(this).replaceWith($content(this).text());
-                    });
-                    content = $content('body').html();
-                }
+                // Extract content paragraphs
+                let content = '';
+                $('article.page-content section p').each((i, el) => {
+                    content += $(el).text().trim() + '\n\n';
+                });
+                content = content.trim();
                 
-                if (title && content) {
+                if (title || content) {
                     result.push({
                         url: currentUrl,
-                        title,
-                        content
+                        title: title || `Chapter ${pageCount + 1}`,
+                        content: content || 'No content found'
                     });
                 } else {
                     console.warn('No title or content found on page');
+                    // Save the HTML for debugging
+                    fs.writeFileSync('debug.html', response.data);
+                    console.log('Saved page HTML to debug.html for inspection');
                 }
                 
                 // Check if we've reached p1.html
