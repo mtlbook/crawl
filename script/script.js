@@ -65,7 +65,7 @@ async function crawlNovel(startUrl) {
                 try {
                     const res = await axiosInstance.get(url);
                     const $ = cheerio.load(res.data);
-                    $('script, style, .ad').remove(); // Clean unwanted elements
+                    $('script, style, iframe, noscript, p.abg, .ad, .ads').remove();
 
                     const title = $('article.page-content > h3').text().trim();
                     const content = $('article.page-content section p')
