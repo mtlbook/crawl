@@ -5,7 +5,6 @@ const path = require('path');
 const { URL } = require('url');
 const { promisify } = require('util');
 const { default: PQueue } = require('p-queue');
-const readline = require('readline');  // Added this line
 
 const writeFile = promisify(fs.writeFile);
 const mkdir = promisify(fs.mkdir);
@@ -62,11 +61,9 @@ async function crawlNovel(startUrl) {
         const queue = new PQueue({ concurrency: 5 });
         let completed = 0;
 
-        // Improved progress tracker using readline
+        // Progress tracker (single-line updates)
         const updateProgress = () => {
-            readline.clearLine(process.stdout, 0);
-            readline.cursorTo(process.stdout, 0);
-            process.stdout.write(`Downloading: ${completed}/${chapterUrls.length} chapters`);
+            process.stdout.write(`\rDownloading: ${completed}/${chapterUrls.length} chapters`);
         };
 
         console.log('Starting downloads...');
@@ -80,7 +77,7 @@ async function crawlNovel(startUrl) {
                     const $ = cheerio.load(response.data);
 
                     // Remove unwanted elements
-                    $('script, style, iframe, noscript, .ad, .ads').remove();
+                    $('script, style, iframe, noscript, p.abg, .ad, .ads').remove();
 
                     const title = $('article.page-content > h3').text().trim();
                     let content = $('article.page-content section p')
@@ -88,10 +85,17 @@ async function crawlNovel(startUrl) {
                         .get()
                         .join('\n\n');
 
-                    result[index] = { title: title || `Chapter ${index + 1}`, content };
+                    // Store in reverse order (we'll reverse the array later)
+                    result[chapterUrls.length - 1 - index] = { 
+                        title: title || `Chapter ${chapterUrls.length - index}`, 
+                        content 
+                    };
                 } catch (error) {
                     console.error(`\nError downloading ${url}:`, error.message);
-                    result[index] = { title: `Chapter ${index + 1} [Failed]`, content: '' };
+                    result[chapterUrls.length - 1 - index] = { 
+                        title: `Chapter ${chapterUrls.length - index} [Failed]`, 
+                        content: '' 
+                    };
                 } finally {
                     completed++;
                     updateProgress();
@@ -99,8 +103,8 @@ async function crawlNovel(startUrl) {
             })
         ));
 
-        // Finalize output
-        process.stdout.write('\n');  // Move to next line after progress
+        // Finalize output (no need to reverse since we stored in correct order)
+        console.log('\n');
         await writeFile(outputFile, JSON.stringify(result, null, 2));
         console.log(`Saved ${result.length} chapters to ${outputFile}`);
 
