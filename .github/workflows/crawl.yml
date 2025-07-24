@@ -1,0 +1,36 @@
+# .github/workflows/crawl.yml
+name: Novel Crawler
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: 'Search query for novels'
+        required: true
+      url:
+        description: 'Specific novel URL to crawl (optional)'
+        required: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16'
+          
+      - name: Install dependencies
+        run: npm install axios cheerio
+        
+      - name: Run crawler
+        run: |
+          mkdir -p results
+          node scripts/crawler.js "${{ inputs.query }}" "${{ inputs.url || '' }}"
+          
+      - name: Upload results
+        uses: actions/upload-artifact@v2
+        with:
+          name: novel-results
+          path: results/
