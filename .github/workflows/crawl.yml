@@ -6,10 +6,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
@@ -22,6 +22,8 @@ jobs:
       run: mkdir -p result
 
     - name: Run crawler script
+      env:
+        NOVEL_QUERY: "Your Novel Name Here"  # <-- Put your query here
       run: |
         cat << 'EOF' > piaotian_crawler.py
         # -*- coding: utf-8 -*-
@@ -150,9 +152,14 @@ jobs:
         if __name__ == "__main__":
             from lncrawl.core.app import run_app
             import sys
+            import os
             
             # Set output directory
             sys.argv.extend(["--output", "result"])
+            
+            # Get query from environment variable
+            query = os.getenv("NOVEL_QUERY", "default novel")
+            sys.argv.extend(["--query", query])
             
             # Add our crawler to the list
             run_app([PiaoTian])
@@ -161,7 +168,7 @@ jobs:
         python piaotian_crawler.py
 
     - name: Upload results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: novel-results
         path: result/
