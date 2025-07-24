@@ -33,7 +33,7 @@ async function crawlNovel(startUrl) {
         let currentUrl = startUrl;
         let hasNextPage = true;
         let pageCount = 0;
-        const MAX_PAGES = 1000; // Safety limit
+        const MAX_PAGES = 10; // Safety limit
         
         // First, get the first chapter URL from the main page
         try {
@@ -42,7 +42,7 @@ async function crawlNovel(startUrl) {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
                 },
-                timeout: 10000
+                timeout: 1000
             });
             
             const $main = cheerio.load(mainPageResponse.data);
@@ -66,7 +66,7 @@ async function crawlNovel(startUrl) {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
                     },
-                    timeout: 10000
+                    timeout: 1000
                 });
                 
                 const $ = cheerio.load(response.data);
