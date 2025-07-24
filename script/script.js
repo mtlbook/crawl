@@ -33,7 +33,7 @@ const resultDir = path.join(__dirname, '../results');
         let currentUrl = startUrl;
         let hasNextPage = true;
         let pageCount = 0;
-        const MAX_PAGES = 6845;
+        const MAX_PAGES = 10;
 
         const axiosInstance = axios.create({
             timeout: 5000,
