@@ -1,9 +1,9 @@
+// scripts/crawler.js
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-// Ensure results directory exists
 const RESULTS_DIR = path.join(__dirname, '../results');
 if (!fs.existsSync(RESULTS_DIR)) {
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
@@ -11,7 +11,6 @@ if (!fs.existsSync(RESULTS_DIR)) {
 
 class IxdzsCrawler {
   constructor() {
-    this.results = [];
     this.novelInfo = {
       title: '',
       author: '',
@@ -20,6 +19,11 @@ class IxdzsCrawler {
       volumes: [],
       chapters: []
     };
+    this.downloadDelay = 1000; // 1 second delay between requests
+  }
+
+  async delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   async getSoup(url) {
@@ -49,7 +53,6 @@ class IxdzsCrawler {
       });
     });
 
-    // Save search results
     fs.writeFileSync(
       path.join(RESULTS_DIR, `search_${query.replace(/\s+/g, '_')}.json`),
       JSON.stringify(results, null, 2)
@@ -58,7 +61,20 @@ class IxdzsCrawler {
     return results;
   }
 
-  async crawlNovel(url) {
+  async downloadChapter(url) {
+    await this.delay(this.downloadDelay); // Respectful crawling
+    const $ = await this.getSoup(url);
+    if (!$) return '';
+
+    const content = [];
+    $('article.page-content section p').each((i, el) => {
+      content.push($(el).text().trim());
+    });
+
+    return content.join('\n\n');
+  }
+
+  async crawlNovel(url, maxChapters = 5) {
     const $ = await this.getSoup(url);
     if (!$) return;
 
@@ -71,34 +87,37 @@ class IxdzsCrawler {
     // Extract chapters
     const lastChapterUrl = $('ul.u-chapter > li:nth-child(1) > a').attr('href');
     const lastChapterNum = parseInt(lastChapterUrl.match(/p(\d+)\.html/)[1]);
+    const chaptersToDownload = Math.min(maxChapters, lastChapterNum);
 
-    for (let i = 1; i <= lastChapterNum; i++) {
-      if (i % 100 === 1) {
-        this.novelInfo.volumes.push({
-          id: Math.floor(i / 100) + 1,
-          title: `Volume ${Math.floor(i / 100) + 1}`
-        });
-      }
+    for (let i = 1; i <= chaptersToDownload; i++) {
+      const chapterUrl = `${url.replace(/\/$/, '')}/p${i}.html`;
+      console.log(`Downloading chapter ${i}/${chaptersToDownload}`);
+      
+      const chapterContent = await this.downloadChapter(chapterUrl);
       
       this.novelInfo.chapters.push({
         id: i,
         title: `Chapter ${i}`,
-        url: `${url.replace(/\/$/, '')}/p${i}.html`
+        url: chapterUrl,
+        content: chapterContent
       });
+
+      // Save progress after each chapter
+      this.saveNovelInfo();
     }
 
-    // Save novel info
+    return this.novelInfo;
+  }
+
+  saveNovelInfo() {
     const filename = `novel_${this.novelInfo.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
     fs.writeFileSync(
       path.join(RESULTS_DIR, filename),
       JSON.stringify(this.novelInfo, null, 2)
     );
-
-    return this.novelInfo;
   }
 }
 
-// Main execution
 async function main() {
   const [query, novelUrl] = process.argv.slice(2);
   const crawler = new IxdzsCrawler();
@@ -106,6 +125,7 @@ async function main() {
   if (novelUrl) {
     console.log(`Crawling novel at ${novelUrl}`);
     await crawler.crawlNovel(novelUrl);
+    console.log('Crawling completed!');
   } else {
     console.log(`Searching for novels with query: ${query}`);
     const results = await crawler.searchNovel(query);
