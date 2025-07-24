@@ -11,7 +11,7 @@ const BASE_URLS = [
   'https://tw.m.ixdzs.com/',
   'https://www.aixdzs.com'
 ];
-const SEARCH_URL = 'https://ixdzs8.tw/bsearch?q=';
+const SEARCH_URL = 'https://ixdzs.tw/bsearch?q=';
 
 class IxdzsCrawler {
   constructor() {
@@ -37,8 +37,8 @@ class IxdzsCrawler {
 
   rectifyUrl(url) {
     url = url.endsWith('/') ? url.slice(0, -1) : url;
-    if (url.includes('https://tw.m.ixdzs.com')) {
-      return url.replace('https://tw.m.ixdzs.com', 'https://ixdzs8.tw');
+    if (url.includes('https://ixdzs.tw')) {
+      return url.replace('https://ixdzs.tw', 'https://ixdzs.tw');
     }
     if (url.includes('https://www.aixdzs.com')) {
       return url.replace('https://www.aixdzs.com', 'https://ixdzs8.com');
