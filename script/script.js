@@ -92,7 +92,7 @@ async function crawlNovel(startUrl) {
                         // Skip entirely if both are missing
                         return;
                     } else if (!content) {
-                        content = "- Chapter is missing";
+                        content = "Chapter is missing";
                     } else if (!title) {
                         title = "Empty";
                     }
