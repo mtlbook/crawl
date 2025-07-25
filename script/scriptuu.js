@@ -76,56 +76,44 @@ async function crawlNovel(startUrl) {
         updateProgress();
 
         // Download all chapters in parallel
-        await Promise.all(chapterLinks.map((url, index) => {
-            return queue.add(async () => {
-                try {
-                    const response = await axiosInstance.get(url);
-                    const $ = cheerio.load(response.data);
+     await Promise.all(
+    chapterLinks.map((url, index) => 
+        queue.add(async () => {
+            try {
+                const response = await axiosInstance.get(url);
+                const $ = cheerio.load(response.data);
 
-                    // Remove unwanted elements
-                    $('script, style, iframe, noscript, .ad, .ads').remove();
+                // Clean the HTML
+                $('script, style, iframe, noscript, .ad, .ads').remove();
 
-                    // Extract title and content
-                    let title = $('h1.pt10').text().trim();
-                    let content = $('div.readcotent.bbb.font-normal').html();
+                // Extract title and content
+                const title = $('h1.pt10').text().trim() || `Chapter ${index + 1}`;
+                let content = $('div.readcotent.bbb.font-normal').html();
 
-                    // Clean up content
-                    if (content) {
-                        content = content
-                            .replace(/<br\s*\/?>/gi, '\n')
+                // Process content if exists
+                content = content
+                    ? content.replace(/<br\s*\/?>/gi, '\n')
                             .replace(/<\/p><p>/gi, '\n\n')
                             .replace(/<[^>]+>/g, '')
-                            .trim();
-                    }
+                            .trim()
+                    : "Chapter content is missing";
 
-                    // Handle missing data cases
-                    if (!title && !content) {
-                        // Skip entirely if both are missing
-                        return;
-                    } else if (!content) {
-                        content = "Chapter content is missing";
-                    } else if (!title) {
-                        title = `Chapter ${index + 1}`;
-                    }
-
-                    result[index] = { 
-                        title, 
-                        content 
-                    };
-                } catch (error) {
-                    console.error(`\nError downloading ${url}:`, error.message);
-                    // Include a placeholder for failed chapters
-                    result[index] = {
-                        title: `Chapter ${index + 1} (Failed to download)`,
-                        content: `Failed to download content from ${url}`
-                    };
-                } finally {
-                    completed++;
-                    updateProgress();
-                }
-            });
-        });
-
+                // Store result
+                result[index] = { title, content };
+                
+            } catch (error) {
+                console.error(`Error downloading ${url}:`, error.message);
+                result[index] = {
+                    title: `Chapter ${index + 1} (Failed)`,
+                    content: `Failed to download: ${error.message}`
+                };
+            } finally {
+                completed++;
+                updateProgress();
+            }
+        })
+    )
+);
         // Filter out any undefined entries (from skipped chapters)
         const filteredResult = result.filter(chapter => chapter !== undefined);
 
