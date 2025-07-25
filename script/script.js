@@ -79,23 +79,32 @@ async function crawlNovel(startUrl) {
                     // Remove unwanted elements
                     $('script, style, iframe, noscript, p.abg, .ad, .ads').remove();
 
-                    const title = $('article.page-content > h3').text().trim();
+                    let title = $('article.page-content > h3').text().trim();
                     let content = $('article.page-content section p')
                         .map((_, el) => $(el).text().trim().replace(/https?:\/\/[^\s]+/g, ''))
                         .get()
                         .join('\n\n');
 
-                    // Store in reverse order (we'll reverse the array later)
+                    const chapterNumber = chapterUrls.length - index;
+                    
+                    // Handle missing data cases
+                    if (!title && !content) {
+                        // Skip entirely if both are missing
+                        return;
+                    } else if (!content) {
+                        content = "- Chapter is missing";
+                    } else if (!title) {
+                        title = "Empty";
+                    }
+
+                    // Store in reverse order
                     result[chapterUrls.length - 1 - index] = { 
-                        title: title || `Chapter ${chapterUrls.length - index}`, 
+                        title: title || `Chapter ${chapterNumber}`, 
                         content 
                     };
                 } catch (error) {
                     console.error(`\nError downloading ${url}:`, error.message);
-                    result[chapterUrls.length - 1 - index] = { 
-                        title: `Chapter ${chapterUrls.length - index} [Failed]`, 
-                        content: '' 
-                    };
+                    // Don't include failed chapters in the result
                 } finally {
                     completed++;
                     updateProgress();
@@ -103,10 +112,13 @@ async function crawlNovel(startUrl) {
             })
         ));
 
-        // Finalize output (no need to reverse since we stored in correct order)
+        // Filter out any undefined entries (from skipped chapters)
+        const filteredResult = result.filter(chapter => chapter !== undefined);
+
+        // Finalize output
         console.log('\n');
-        await writeFile(outputFile, JSON.stringify(result, null, 2));
-        console.log(`Saved ${result.length} chapters to ${outputFile}`);
+        await writeFile(outputFile, JSON.stringify(filteredResult, null, 2));
+        console.log(`Saved ${filteredResult.length} chapters to ${outputFile}`);
 
         return outputFile;
     } catch (error) {
