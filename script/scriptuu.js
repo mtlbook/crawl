@@ -76,8 +76,8 @@ async function crawlNovel(startUrl) {
         updateProgress();
 
         // Download all chapters in parallel
-        await Promise.all(chapterLinks.map((url, index) =>
-            queue.add(async () => {
+        await Promise.all(chapterLinks.map((url, index) => {
+            return queue.add(async () => {
                 try {
                     const response = await axiosInstance.get(url);
                     const $ = cheerio.load(response.data);
@@ -123,8 +123,8 @@ async function crawlNovel(startUrl) {
                     completed++;
                     updateProgress();
                 }
-            })
-        );
+            });
+        });
 
         // Filter out any undefined entries (from skipped chapters)
         const filteredResult = result.filter(chapter => chapter !== undefined);
